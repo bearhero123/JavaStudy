@@ -1,0 +1,24 @@
+# Local dependency caches
+.m2repo/
+
+# Java build outputs
+mis-study-backend/target/
+*.log
+
+# Frontend dependencies and build outputs
+mis-study-ui/node_modules/
+mis-study-ui/dist/
+mis-study-ui/.vite/
+
+# Environment-specific application configuration
+mis-study-backend/src/main/resources/application.yaml
+
+# Packaged deployment artifacts
+deploy/*.tar.gz
+
+# IDE and operating-system files
+.idea/
+.vscode/
+*.iml
+.DS_Store
+Thumbs.db
