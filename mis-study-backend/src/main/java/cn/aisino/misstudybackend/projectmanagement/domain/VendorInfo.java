@@ -9,7 +9,7 @@ import java.time.LocalDateTime;
 
 
 @Data
-@TableName("vendor_info")
+@TableName("per_vendor_info")
 
 public class VendorInfo {
 
