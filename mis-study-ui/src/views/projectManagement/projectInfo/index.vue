@@ -10,6 +10,8 @@ import {
   type ProjectInfoQuery,
 } from '@/api/projectManagement/projectInfo'
 
+defineOptions({ name: 'ProjectInfoManagement' })
+
 const loading = ref(false)
 const submitLoading = ref(false)
 const dialogVisible = ref(false)
@@ -266,16 +268,15 @@ onMounted(() => {
         </div>
       </template>
 
-      <el-table
-        v-loading="loading"
-        :data="projectList"
-        border
-        stripe
-        style="width: 100%"
-      >
+      <el-table v-loading="loading" :data="projectList" border stripe style="width: 100%">
         <el-table-column prop="projectId" label="ID" width="80" align="center" />
         <el-table-column prop="projectNumber" label="项目编号" width="140" />
-        <el-table-column prop="projectNameCn" label="项目名称" min-width="220" show-overflow-tooltip />
+        <el-table-column
+          prop="projectNameCn"
+          label="项目名称"
+          min-width="220"
+          show-overflow-tooltip
+        />
         <el-table-column prop="projectType" label="项目类型" width="120" />
         <el-table-column prop="projectStatus" label="项目状态" width="120" />
         <el-table-column prop="clientName" label="客户名称" min-width="200" show-overflow-tooltip />
@@ -335,7 +336,11 @@ onMounted(() => {
 
           <el-col :span="12">
             <el-form-item label="项目类型" required>
-              <el-select v-model="form.projectType" placeholder="请选择项目类型" style="width: 100%">
+              <el-select
+                v-model="form.projectType"
+                placeholder="请选择项目类型"
+                style="width: 100%"
+              >
                 <el-option label="内部项目" value="内部项目" />
                 <el-option label="外部项目" value="外部项目" />
               </el-select>
@@ -344,7 +349,11 @@ onMounted(() => {
 
           <el-col :span="12">
             <el-form-item label="项目状态">
-              <el-select v-model="form.projectStatus" placeholder="请选择项目状态" style="width: 100%">
+              <el-select
+                v-model="form.projectStatus"
+                placeholder="请选择项目状态"
+                style="width: 100%"
+              >
                 <el-option label="进行中" value="进行中" />
                 <el-option label="已验收" value="已验收" />
                 <el-option label="暂停" value="暂停" />
@@ -388,7 +397,11 @@ onMounted(() => {
 
           <el-col :span="12">
             <el-form-item label="合同状态">
-              <el-select v-model="form.contractStatus" placeholder="请选择合同状态" style="width: 100%">
+              <el-select
+                v-model="form.contractStatus"
+                placeholder="请选择合同状态"
+                style="width: 100%"
+              >
                 <el-option label="已签署" value="已签署" />
                 <el-option label="未签署" value="未签署" />
                 <el-option label="洽谈中" value="洽谈中" />
@@ -422,12 +435,7 @@ onMounted(() => {
 
           <el-col :span="24">
             <el-form-item label="备注">
-              <el-input
-                v-model="form.remark"
-                type="textarea"
-                :rows="3"
-                placeholder="请输入备注"
-              />
+              <el-input v-model="form.remark" type="textarea" :rows="3" placeholder="请输入备注" />
             </el-form-item>
           </el-col>
         </el-row>
@@ -435,9 +443,7 @@ onMounted(() => {
 
       <template #footer>
         <el-button @click="dialogVisible = false">取消</el-button>
-        <el-button type="primary" :loading="submitLoading" @click="submitForm">
-          确定
-        </el-button>
+        <el-button type="primary" :loading="submitLoading" @click="submitForm"> 确定 </el-button>
       </template>
     </el-dialog>
   </div>
