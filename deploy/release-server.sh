@@ -61,12 +61,26 @@ install -m 0644 "$JAR" "$RUNTIME_DIR/mis-study-backend.jar.new"
 cp -p "$RUNTIME_DIR/mis-study-backend.jar" "$RUNTIME_DIR/mis-study-backend.jar.previous"
 mv -f "$RUNTIME_DIR/mis-study-backend.jar.new" "$RUNTIME_DIR/mis-study-backend.jar"
 
-if ! systemctl restart mis-study-backend.service || ! systemctl is-active --quiet mis-study-backend.service; then
+backend_ready=0
+if systemctl restart mis-study-backend.service; then
+  for _ in {1..30}; do
+    if systemctl is-active --quiet mis-study-backend.service; then
+      http_status="$(curl -sS -o /dev/null -w '%{http_code}' --max-time 2 http://127.0.0.1:8080/ || true)"
+      if [[ "$http_status" != "000" && -n "$http_status" ]]; then
+        backend_ready=1
+        break
+      fi
+    fi
+    sleep 1
+  done
+fi
+
+if (( ! backend_ready )); then
   cp -p "$RUNTIME_DIR/mis-study-backend.jar.previous" "$RUNTIME_DIR/mis-study-backend.jar"
   ln -s "$PREVIOUS_WEB_ROOT" "$WEB_ROOT.rollback"
   mv -Tf "$WEB_ROOT.rollback" "$WEB_ROOT"
   systemctl restart mis-study-backend.service || true
-  die "service restart failed; the previous application files were restored"
+  die "service did not become ready; the previous application files were restored"
 fi
 
 printf 'Release %s completed successfully.\n' "$REVISION"
