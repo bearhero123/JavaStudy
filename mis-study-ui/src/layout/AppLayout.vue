@@ -5,22 +5,68 @@ import { RouterView, useRoute, useRouter } from 'vue-router'
 const route = useRoute()
 const router = useRouter()
 
-const menuRoutes = computed(() =>
-  router
-    .getRoutes()
-    .filter((item) => item.meta.menu === true && typeof item.meta.title === 'string')
-    .sort((left, right) => Number(left.meta.order || 0) - Number(right.meta.order || 0)),
-)
+const menuGroups = computed(() => {
+  const groups = new Map<
+    string,
+    {
+      title: string
+      order: number
+      routes: ReturnType<typeof router.getRoutes>
+    }
+  >()
+
+  for (const item of router.getRoutes()) {
+    if (item.meta.menu !== true || typeof item.meta.title !== 'string') {
+      continue
+    }
+
+    const groupTitle = typeof item.meta.group === 'string' ? item.meta.group : '其他'
+    const groupOrder = Number(item.meta.groupOrder || 999)
+    const group = groups.get(groupTitle)
+
+    if (group) {
+      group.routes.push(item)
+    } else {
+      groups.set(groupTitle, {
+        title: groupTitle,
+        order: groupOrder,
+        routes: [item],
+      })
+    }
+  }
+
+  return Array.from(groups.values())
+    .map((group) => ({
+      ...group,
+      routes: group.routes.sort(
+        (left, right) => Number(left.meta.order || 0) - Number(right.meta.order || 0),
+      ),
+    }))
+    .sort((left, right) => left.order - right.order)
+})
+
+const defaultOpenGroups = computed(() => menuGroups.value.map((group) => group.title))
 </script>
 
 <template>
   <el-container class="app-shell">
     <el-aside class="app-aside" width="220px">
-      <div class="app-title">项目管理</div>
-      <el-menu :default-active="route.path" class="app-menu" router>
-        <el-menu-item v-for="item in menuRoutes" :key="item.path" :index="item.path">
-          {{ item.meta.title }}
-        </el-menu-item>
+      <div class="app-title">管理信息系统</div>
+      <el-menu
+        :default-active="route.path"
+        :default-openeds="defaultOpenGroups"
+        class="app-menu"
+        router
+      >
+        <el-sub-menu v-for="group in menuGroups" :key="group.title" :index="group.title">
+          <template #title>
+            <span>{{ group.title }}</span>
+          </template>
+
+          <el-menu-item v-for="item in group.routes" :key="item.path" :index="item.path">
+            {{ item.meta.title }}
+          </el-menu-item>
+        </el-sub-menu>
       </el-menu>
     </el-aside>
 
@@ -57,6 +103,11 @@ const menuRoutes = computed(() =>
 
 .app-menu {
   border-right: 0;
+}
+
+.app-menu :deep(.el-sub-menu__title) {
+  font-weight: 600;
+  color: #303133;
 }
 
 .app-main {

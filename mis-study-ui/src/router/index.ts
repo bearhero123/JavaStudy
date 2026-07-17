@@ -5,7 +5,6 @@
 import { createRouter, createWebHistory, type RouteRecordRaw } from 'vue-router'
 import AppLayout from '@/layout/AppLayout.vue'
 
-
 //路由配置数组 routes
 const routes: RouteRecordRaw[] = [
   {
@@ -26,6 +25,8 @@ const routes: RouteRecordRaw[] = [
           title: '客户管理', // 页面标题
           menu: true, // 是否显示在菜单中（用于动态生成菜单）
           order: 1, // 菜单排序
+          group: '项目管理',
+          groupOrder: 1,
         },
       },
       {
@@ -36,6 +37,8 @@ const routes: RouteRecordRaw[] = [
           title: '项目基本信息',
           menu: true,
           order: 2,
+          group: '项目管理',
+          groupOrder: 1,
         },
       },
       {
@@ -46,6 +49,80 @@ const routes: RouteRecordRaw[] = [
           title: '供应商管理',
           menu: true,
           order: 3,
+          group: '项目管理',
+          groupOrder: 1,
+        },
+      },
+      {
+        path: 'system/dept',
+        name: 'SystemDept',
+        component: () => import('@/views/system/dept/index.vue'),
+        meta: {
+          title: '部门管理',
+          menu: true,
+          order: 4,
+          group: '系统管理',
+          groupOrder: 2,
+        },
+      },
+      {
+        path: 'system/post',
+        name: 'SystemPost',
+        component: () => import('@/views/system/post/index.vue'),
+        meta: {
+          title: '岗位管理',
+          menu: true,
+          order: 5,
+          group: '系统管理',
+          groupOrder: 2,
+        },
+      },
+      {
+        path: 'system/user',
+        name: 'SystemUser',
+        component: () => import('@/views/system/user/index.vue'),
+        meta: {
+          title: '用户管理',
+          menu: true,
+          order: 6,
+          group: '系统管理',
+          groupOrder: 2,
+        },
+      },
+      {
+        path: 'system/role',
+        name: 'SystemRole',
+        component: () => import('@/views/system/role/index.vue'),
+        meta: {
+          title: '角色管理',
+          menu: true,
+          order: 7,
+          group: '系统管理',
+          groupOrder: 2,
+        },
+      },
+      {
+        path: 'system/menu',
+        name: 'SystemMenu',
+        component: () => import('@/views/system/menu/index.vue'),
+        meta: {
+          title: '菜单管理',
+          menu: true,
+          order: 8,
+          group: '系统管理',
+          groupOrder: 2,
+        },
+      },
+      {
+        path: 'system/config',
+        name: 'SystemConfig',
+        component: () => import('@/views/system/config/index.vue'),
+        meta: {
+          title: '参数设置',
+          menu: true,
+          order: 9,
+          group: '系统管理',
+          groupOrder: 2,
         },
       },
     ],
@@ -61,10 +138,10 @@ const router = createRouter({
 })
 
 //全局后置钩子 router.afterEach
-//动态修改浏览器标签页标题：如果有标题则显示“标题 - 项目管理”，否则只显示“项目管理”。
+//动态修改浏览器标签页标题：如果有标题则显示“标题 - 管理信息系统”，否则只显示“管理信息系统”。
 router.afterEach((to) => {
   const title = typeof to.meta.title === 'string' ? to.meta.title : ''
-  document.title = title ? `${title} - 项目管理` : '项目管理'
+  document.title = title ? `${title} - 管理信息系统` : '管理信息系统'
 })
 
 //导出路由实例

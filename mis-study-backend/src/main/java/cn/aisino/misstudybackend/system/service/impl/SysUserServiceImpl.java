@@ -2,14 +2,8 @@ package cn.aisino.misstudybackend.system.service.impl;
 
 import cn.aisino.misstudybackend.common.PageQuery;
 import cn.aisino.misstudybackend.common.TableDataInfo;
-import cn.aisino.misstudybackend.system.domain.SysDept;
-import cn.aisino.misstudybackend.system.domain.SysPost;
-import cn.aisino.misstudybackend.system.domain.SysUser;
-import cn.aisino.misstudybackend.system.domain.SysUserPost;
-import cn.aisino.misstudybackend.system.mapper.SysDeptMapper;
-import cn.aisino.misstudybackend.system.mapper.SysPostMapper;
-import cn.aisino.misstudybackend.system.mapper.SysUserMapper;
-import cn.aisino.misstudybackend.system.mapper.SysUserPostMapper;
+import cn.aisino.misstudybackend.system.domain.*;
+import cn.aisino.misstudybackend.system.mapper.*;
 import cn.aisino.misstudybackend.system.service.ISysUserService;
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
@@ -39,7 +33,9 @@ public class SysUserServiceImpl
 
     private final SysDeptMapper deptMapper;
     private final SysPostMapper postMapper;
+    private final SysRoleMapper roleMapper;
     private final SysUserPostMapper userPostMapper;
+    private final SysUserRoleMapper userRoleMapper;
     private final BCryptPasswordEncoder passwordEncoder = new BCryptPasswordEncoder();
 
     @Override
@@ -47,7 +43,6 @@ public class SysUserServiceImpl
         SysUser effectiveQuery = query == null ? new SysUser() : query;
         PageQuery effectivePage = pageQuery == null ? new PageQuery() : pageQuery;
         Page<SysUser> page = new Page<>(effectivePage.getPageNum(), effectivePage.getPageSize());
-
         LambdaQueryWrapper<SysUser> wrapper = new LambdaQueryWrapper<>();
         wrapper.eq(SysUser::getDelFlag, "0")
                 .like(StringUtils.hasText(effectiveQuery.getUserName()),
@@ -62,7 +57,6 @@ public class SysUserServiceImpl
                         SysUser::getDeptId, effectiveQuery.getDeptId())
                 .orderByDesc(SysUser::getCreateTime)
                 .orderByDesc(SysUser::getUserId);
-
         Page<SysUser> result = page(page, wrapper);
         fillRelations(result.getRecords());
         return TableDataInfo.build(result);
@@ -106,11 +100,11 @@ public class SysUserServiceImpl
         user.setDelFlag("0");
         user.setCreateBy("admin");
         user.setCreateTime(LocalDateTime.now());
-
         if (baseMapper.insert(user) <= 0) {
             return false;
         }
         insertUserPosts(user.getUserId(), user.getPostIds());
+        insertUserRoles(user.getUserId(), user.getRoleIds());
         return true;
     }
 
@@ -124,15 +118,18 @@ public class SysUserServiceImpl
         user.setCreateTime(null);
         user.setUpdateBy("admin");
         user.setUpdateTime(LocalDateTime.now());
-
         if (baseMapper.updateById(user) <= 0) {
             return false;
         }
-
-        LambdaQueryWrapper<SysUserPost> relationWrapper = new LambdaQueryWrapper<>();
-        relationWrapper.eq(SysUserPost::getUserId, user.getUserId());
-        userPostMapper.delete(relationWrapper);
+        LambdaQueryWrapper<SysUserPost> postWrapper = new LambdaQueryWrapper<>();
+        postWrapper.eq(SysUserPost::getUserId, user.getUserId());
+        userPostMapper.delete(postWrapper);
         insertUserPosts(user.getUserId(), user.getPostIds());
+
+        LambdaQueryWrapper<SysUserRole> roleWrapper = new LambdaQueryWrapper<>();
+        roleWrapper.eq(SysUserRole::getUserId, user.getUserId());
+        userRoleMapper.delete(roleWrapper);
+        insertUserRoles(user.getUserId(), user.getRoleIds());
         return true;
     }
 
@@ -142,17 +139,22 @@ public class SysUserServiceImpl
         if (queryDetail(userId) == null) {
             return false;
         }
-
-        LambdaQueryWrapper<SysUserPost> relationWrapper = new LambdaQueryWrapper<>();
-        relationWrapper.eq(SysUserPost::getUserId, userId);
-        userPostMapper.delete(relationWrapper);
-
         SysUser user = new SysUser();
         user.setUserId(userId);
         user.setDelFlag("2");
         user.setUpdateBy("admin");
         user.setUpdateTime(LocalDateTime.now());
-        return baseMapper.updateById(user) > 0;
+        if (baseMapper.updateById(user) <= 0) {
+            return false;
+        }
+
+        LambdaQueryWrapper<SysUserPost> postWrapper = new LambdaQueryWrapper<>();
+        postWrapper.eq(SysUserPost::getUserId, userId);
+        userPostMapper.delete(postWrapper);
+        LambdaQueryWrapper<SysUserRole> roleWrapper = new LambdaQueryWrapper<>();
+        roleWrapper.eq(SysUserRole::getUserId, userId);
+        userRoleMapper.delete(roleWrapper);
+        return true;
     }
 
     private <T> boolean existsByField(
@@ -165,7 +167,6 @@ public class SysUserServiceImpl
         if (value == null) {
             return false;
         }
-
         Object effectiveValue = value instanceof String text ? text.trim() : value;
         LambdaQueryWrapper<SysUser> wrapper = new LambdaQueryWrapper<>();
         wrapper.eq(SysUser::getDelFlag, "0")
@@ -230,24 +231,47 @@ public class SysUserServiceImpl
             throw new IllegalArgumentException("所属部门不存在、已删除或已停用");
         }
 
-        List<Long> postIds = user.getPostIds();
-        if (postIds == null || postIds.isEmpty()) {
-            user.setPostIds(new ArrayList<>());
-            return;
-        }
-        if (postIds.stream().anyMatch(Objects::isNull)) {
-            throw new IllegalArgumentException("岗位ID不能为空");
-        }
+        user.setPostIds(validateIds(
+                user.getPostIds(),
+                "岗位ID不能为空",
+                ids -> {
+                    LambdaQueryWrapper<SysPost> wrapper = new LambdaQueryWrapper<>();
+                    wrapper.in(SysPost::getPostId, ids)
+                            .eq(SysPost::getDelFlag, "0")
+                            .eq(SysPost::getStatus, "0");
+                    return postMapper.selectCount(wrapper);
+                },
+                "所选岗位包含不存在、已删除或已停用的数据"));
 
-        LinkedHashSet<Long> distinctPostIds = new LinkedHashSet<>(postIds);
-        LambdaQueryWrapper<SysPost> postWrapper = new LambdaQueryWrapper<>();
-        postWrapper.in(SysPost::getPostId, distinctPostIds)
-                .eq(SysPost::getDelFlag, "0")
-                .eq(SysPost::getStatus, "0");
-        if (postMapper.selectCount(postWrapper) != distinctPostIds.size()) {
-            throw new IllegalArgumentException("所选岗位包含不存在、已删除或已停用的数据");
+        user.setRoleIds(validateIds(
+                user.getRoleIds(),
+                "角色ID不能为空",
+                ids -> {
+                    LambdaQueryWrapper<SysRole> wrapper = new LambdaQueryWrapper<>();
+                    wrapper.in(SysRole::getRoleId, ids)
+                            .eq(SysRole::getDelFlag, "0")
+                            .eq(SysRole::getStatus, "0");
+                    return roleMapper.selectCount(wrapper);
+                },
+                "所选角色包含不存在、已删除或已停用的数据"));
+    }
+
+    private List<Long> validateIds(
+            List<Long> ids,
+            String nullMessage,
+            java.util.function.Function<Set<Long>, Long> countFunction,
+            String invalidMessage) {
+        if (ids == null || ids.isEmpty()) {
+            return new ArrayList<>();
         }
-        user.setPostIds(new ArrayList<>(distinctPostIds));
+        if (ids.stream().anyMatch(Objects::isNull)) {
+            throw new IllegalArgumentException(nullMessage);
+        }
+        LinkedHashSet<Long> distinctIds = new LinkedHashSet<>(ids);
+        if (countFunction.apply(distinctIds) != distinctIds.size()) {
+            throw new IllegalArgumentException(invalidMessage);
+        }
+        return new ArrayList<>(distinctIds);
     }
 
     private void insertUserPosts(Long userId, List<Long> postIds) {
@@ -264,21 +288,33 @@ public class SysUserServiceImpl
         }
     }
 
+    private void insertUserRoles(Long userId, List<Long> roleIds) {
+        if (userId == null || roleIds == null || roleIds.isEmpty()) {
+            return;
+        }
+        for (Long roleId : roleIds) {
+            SysUserRole relation = new SysUserRole();
+            relation.setUserId(userId);
+            relation.setRoleId(roleId);
+            if (userRoleMapper.insert(relation) <= 0) {
+                throw new IllegalStateException("保存用户角色关系失败");
+            }
+        }
+    }
+
     private void fillRelations(List<SysUser> users) {
         if (users == null || users.isEmpty()) {
             return;
         }
-
         Set<Long> deptIds = users.stream()
                 .map(SysUser::getDeptId)
                 .filter(Objects::nonNull)
                 .collect(Collectors.toSet());
         Map<Long, String> deptNames = new HashMap<>();
         if (!deptIds.isEmpty()) {
-            LambdaQueryWrapper<SysDept> deptWrapper = new LambdaQueryWrapper<>();
-            deptWrapper.in(SysDept::getDeptId, deptIds)
-                    .eq(SysDept::getDelFlag, "0");
-            deptNames = deptMapper.selectList(deptWrapper).stream()
+            LambdaQueryWrapper<SysDept> wrapper = new LambdaQueryWrapper<>();
+            wrapper.in(SysDept::getDeptId, deptIds).eq(SysDept::getDelFlag, "0");
+            deptNames = deptMapper.selectList(wrapper).stream()
                     .collect(Collectors.toMap(SysDept::getDeptId, SysDept::getDeptName));
         }
 
@@ -286,39 +322,80 @@ public class SysUserServiceImpl
                 .map(SysUser::getUserId)
                 .filter(Objects::nonNull)
                 .toList();
-        Map<Long, List<Long>> userPostIds = new HashMap<>();
-        Set<Long> allPostIds = new LinkedHashSet<>();
-        if (!userIds.isEmpty()) {
-            LambdaQueryWrapper<SysUserPost> relationWrapper = new LambdaQueryWrapper<>();
-            relationWrapper.in(SysUserPost::getUserId, userIds)
-                    .orderByAsc(SysUserPost::getUserId)
-                    .orderByAsc(SysUserPost::getPostId);
-            for (SysUserPost relation : userPostMapper.selectList(relationWrapper)) {
-                userPostIds.computeIfAbsent(relation.getUserId(), key -> new ArrayList<>())
-                        .add(relation.getPostId());
-                allPostIds.add(relation.getPostId());
-            }
-        }
-
-        Map<Long, String> postNames = new HashMap<>();
-        if (!allPostIds.isEmpty()) {
-            LambdaQueryWrapper<SysPost> postWrapper = new LambdaQueryWrapper<>();
-            postWrapper.in(SysPost::getPostId, allPostIds)
-                    .eq(SysPost::getDelFlag, "0");
-            postNames = postMapper.selectList(postWrapper).stream()
-                    .collect(Collectors.toMap(SysPost::getPostId, SysPost::getPostName));
-        }
+        RelationNames postRelations = loadPostRelations(userIds);
+        RelationNames roleRelations = loadRoleRelations(userIds);
 
         for (SysUser user : users) {
             user.setDeptName(deptNames.get(user.getDeptId()));
-            List<Long> ids = new ArrayList<>(
-                    userPostIds.getOrDefault(user.getUserId(), Collections.emptyList()));
-            user.setPostIds(ids);
-            List<String> names = ids.stream()
-                    .map(postNames::get)
-                    .filter(Objects::nonNull)
-                    .toList();
-            user.setPostNames(new ArrayList<>(names));
+            List<Long> postIds = new ArrayList<>(postRelations.idsByUser()
+                    .getOrDefault(user.getUserId(), Collections.emptyList()));
+            user.setPostIds(postIds);
+            user.setPostNames(namesForIds(postIds, postRelations.namesById()));
+
+            List<Long> roleIds = new ArrayList<>(roleRelations.idsByUser()
+                    .getOrDefault(user.getUserId(), Collections.emptyList()));
+            user.setRoleIds(roleIds);
+            user.setRoleNames(namesForIds(roleIds, roleRelations.namesById()));
         }
+    }
+
+    private RelationNames loadPostRelations(List<Long> userIds) {
+        Map<Long, List<Long>> idsByUser = new HashMap<>();
+        Set<Long> allIds = new LinkedHashSet<>();
+        if (!userIds.isEmpty()) {
+            LambdaQueryWrapper<SysUserPost> wrapper = new LambdaQueryWrapper<>();
+            wrapper.in(SysUserPost::getUserId, userIds)
+                    .orderByAsc(SysUserPost::getUserId)
+                    .orderByAsc(SysUserPost::getPostId);
+            for (SysUserPost relation : userPostMapper.selectList(wrapper)) {
+                idsByUser.computeIfAbsent(relation.getUserId(), key -> new ArrayList<>())
+                        .add(relation.getPostId());
+                allIds.add(relation.getPostId());
+            }
+        }
+        Map<Long, String> names = new HashMap<>();
+        if (!allIds.isEmpty()) {
+            LambdaQueryWrapper<SysPost> wrapper = new LambdaQueryWrapper<>();
+            wrapper.in(SysPost::getPostId, allIds).eq(SysPost::getDelFlag, "0");
+            names = postMapper.selectList(wrapper).stream()
+                    .collect(Collectors.toMap(SysPost::getPostId, SysPost::getPostName));
+        }
+        return new RelationNames(idsByUser, names);
+    }
+
+    private RelationNames loadRoleRelations(List<Long> userIds) {
+        Map<Long, List<Long>> idsByUser = new HashMap<>();
+        Set<Long> allIds = new LinkedHashSet<>();
+        if (!userIds.isEmpty()) {
+            LambdaQueryWrapper<SysUserRole> wrapper = new LambdaQueryWrapper<>();
+            wrapper.in(SysUserRole::getUserId, userIds)
+                    .orderByAsc(SysUserRole::getUserId)
+                    .orderByAsc(SysUserRole::getRoleId);
+            for (SysUserRole relation : userRoleMapper.selectList(wrapper)) {
+                idsByUser.computeIfAbsent(relation.getUserId(), key -> new ArrayList<>())
+                        .add(relation.getRoleId());
+                allIds.add(relation.getRoleId());
+            }
+        }
+        Map<Long, String> names = new HashMap<>();
+        if (!allIds.isEmpty()) {
+            LambdaQueryWrapper<SysRole> wrapper = new LambdaQueryWrapper<>();
+            wrapper.in(SysRole::getRoleId, allIds).eq(SysRole::getDelFlag, "0");
+            names = roleMapper.selectList(wrapper).stream()
+                    .collect(Collectors.toMap(SysRole::getRoleId, SysRole::getRoleName));
+        }
+        return new RelationNames(idsByUser, names);
+    }
+
+    private List<String> namesForIds(List<Long> ids, Map<Long, String> namesById) {
+        return new ArrayList<>(ids.stream()
+                .map(namesById::get)
+                .filter(Objects::nonNull)
+                .toList());
+    }
+
+    private record RelationNames(
+            Map<Long, List<Long>> idsByUser,
+            Map<Long, String> namesById) {
     }
 }
